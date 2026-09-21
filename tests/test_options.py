@@ -3,13 +3,16 @@ from pathlib import Path
 import pytest
 
 from yt_downloader.options import (
+    AudioOptions,
     ClipOptions,
     CommonOptions,
     VideoOptions,
+    build_audio_params,
     build_clip_params,
     build_common_params,
     build_format,
     build_video_params,
+    parse_audio_quality,
     parse_rate_limit,
     parse_timestamp,
 )
@@ -142,3 +145,51 @@ def test_video_keeps_chapters():
     params = build_video_params(CommonOptions(), VideoOptions())
     metadata = next(pp for pp in params["postprocessors"] if pp["key"] == "FFmpegMetadata")
     assert metadata["add_chapters"] is True
+
+
+# --- audio ---
+
+
+def extract_pp(params):
+    return next(pp for pp in params["postprocessors"] if pp["key"] == "FFmpegExtractAudio")
+
+
+def test_audio_defaults_to_lossless_m4a():
+    params = build_audio_params(CommonOptions(), AudioOptions())
+    assert params["format"] == "ba[acodec^=mp4a]/ba/b"
+    assert extract_pp(params) == {"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}
+    assert pp_keys(params) == ["FFmpegExtractAudio", "FFmpegMetadata", "EmbedThumbnail"]
+    assert "merge_output_format" not in params
+
+
+def test_audio_opus_prefers_opus_stream():
+    params = build_audio_params(CommonOptions(embed_thumbnail=False), AudioOptions(codec="opus"))
+    assert params["format"] == "ba[acodec=opus]/ba/b"
+    assert pp_keys(params) == ["FFmpegExtractAudio", "FFmpegMetadata"]
+
+
+def test_audio_mp3_gets_default_quality():
+    params = build_audio_params(CommonOptions(), AudioOptions(codec="mp3"))
+    assert params["format"] == "ba/b"
+    assert extract_pp(params)["preferredquality"] == "2"
+
+
+def test_audio_explicit_bitrate():
+    params = build_audio_params(CommonOptions(), AudioOptions(codec="mp3", quality="320K"))
+    assert extract_pp(params)["preferredquality"] == "320"
+
+
+def test_audio_uses_its_own_archive():
+    params = build_audio_params(CommonOptions(output_dir=Path("out"), use_archive=True), AudioOptions())
+    assert params["download_archive"] == str(Path("out") / "archive-audio.txt")
+
+
+@pytest.mark.parametrize("value, expected", [("0", "0"), ("10", "10"), ("192k", "192"), ("128", "128"), ("5.5", "5.5")])
+def test_parse_audio_quality(value, expected):
+    assert parse_audio_quality(value) == expected
+
+
+@pytest.mark.parametrize("value", ["high", "", "11", "20k", "1000k", "-1"])
+def test_parse_audio_quality_rejects_garbage(value):
+    with pytest.raises(ValueError):
+        parse_audio_quality(value)

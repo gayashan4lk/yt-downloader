@@ -103,3 +103,30 @@ def test_clip_rejects_bad_times(monkeypatch, args):
     result = runner.invoke(cli.app, ["clip", "https://youtu.be/a", *args])
     assert result.exit_code == 2
     assert captured == {}
+
+
+def test_audio_passes_codec_and_quality(monkeypatch):
+    captured = stub(monkeypatch)
+    result = runner.invoke(
+        cli.app, ["audio", "https://youtu.be/a", "https://youtu.be/b", "-c", "mp3", "-q", "192k", "--archive"]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["urls"] == ["https://youtu.be/a", "https://youtu.be/b"]
+    extract = captured["params"]["postprocessors"][0]
+    assert extract == {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
+    assert captured["params"]["download_archive"].endswith("archive-audio.txt")
+
+
+def test_audio_defaults_to_m4a(monkeypatch):
+    captured = stub(monkeypatch)
+    result = runner.invoke(cli.app, ["audio", "https://youtu.be/a"])
+    assert result.exit_code == 0, result.output
+    assert captured["params"]["postprocessors"][0]["preferredcodec"] == "m4a"
+
+
+@pytest.mark.parametrize("args", [["--codec", "wav"], ["--quality", "loud"], ["-q", "11"]])
+def test_audio_rejects_bad_options(monkeypatch, args):
+    captured = stub(monkeypatch)
+    result = runner.invoke(cli.app, ["audio", "https://youtu.be/a", *args])
+    assert result.exit_code == 2
+    assert captured == {}

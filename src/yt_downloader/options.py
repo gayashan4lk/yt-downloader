@@ -10,11 +10,24 @@ from typing import Any, Literal
 from yt_dlp.utils import download_range_func, parse_bytes
 
 Container = Literal["mp4", "mkv"]
+AudioCodec = Literal["m4a", "mp3", "opus", "best"]
+AUDIO_CODECS: tuple[AudioCodec, ...] = ("m4a", "mp3", "opus", "best")
+
+# Which YouTube audio stream to fetch for each target, so m4a/opus are a lossless copy.
+AUDIO_FORMATS: dict[AudioCodec, str] = {
+    "m4a": "ba[acodec^=mp4a]/ba/b",
+    "opus": "ba[acodec=opus]/ba/b",
+    "mp3": "ba/b",
+    "best": "ba/b",
+}
+DEFAULT_MP3_QUALITY = "2"  # LAME VBR V2, roughly 190 kbps
 
 OUTPUT_TEMPLATE = "%(title)s [%(id)s].%(ext)s"
 # Include the range so clips never overwrite the full video or each other.
 CLIP_OUTPUT_TEMPLATE = "%(title)s [%(id)s] %(section_start>%H-%M-%S)s to %(section_end>%H-%M-%S)s.%(ext)s"
 ARCHIVE_FILENAME = "archive.txt"
+# Separate archive so downloading a video doesn't make `audio` skip it (and vice versa).
+AUDIO_ARCHIVE_FILENAME = "archive-audio.txt"
 
 
 @dataclass(frozen=True)
@@ -43,6 +56,24 @@ class ClipOptions:
     start: float = 0
     end: float | None = None  # None = until the end of the video
     precise: bool = True
+
+
+@dataclass(frozen=True)
+class AudioOptions:
+    codec: AudioCodec = "m4a"
+    quality: str | None = None  # None = codec default
+
+
+def parse_audio_quality(value: str) -> str:
+    """Accept a VBR level 0 (best) to 10 (smallest), or a bitrate such as '192k' or '192'."""
+    text = value.strip().lower().removesuffix("k")
+    try:
+        number = float(text)
+    except ValueError:
+        raise ValueError(f"Invalid quality {value!r}; use 0-10 or a bitrate like 192k") from None
+    if not (0 <= number <= 10 or 32 <= number <= 512):
+        raise ValueError(f"Invalid quality {value!r}; use 0-10 or a bitrate between 32k and 512k")
+    return text
 
 
 def parse_timestamp(value: str) -> float:
@@ -145,4 +176,29 @@ def build_clip_params(common: CommonOptions, video: VideoOptions, clip: ClipOpti
     # Without this, cuts snap to the nearest keyframe (can be several seconds off).
     # With it, ffmpeg re-encodes the clip so it starts and ends exactly where asked.
     params["force_keyframes_at_cuts"] = clip.precise
+    return params
+
+
+def build_audio_params(common: CommonOptions, audio: AudioOptions) -> dict[str, Any]:
+    params = build_common_params(common)
+    params["format"] = AUDIO_FORMATS[audio.codec]
+    if common.use_archive:
+        params["download_archive"] = str(common.output_dir / AUDIO_ARCHIVE_FILENAME)
+
+    quality = audio.quality
+    if quality is None and audio.codec == "mp3":
+        quality = DEFAULT_MP3_QUALITY
+
+    extract: dict[str, Any] = {"key": "FFmpegExtractAudio", "preferredcodec": audio.codec}
+    if quality is not None:
+        # Only used when ffmpeg has to re-encode; a stream that already matches is copied as-is.
+        extract["preferredquality"] = parse_audio_quality(quality)
+
+    postprocessors = [
+        extract,
+        {"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True},
+    ]
+    if common.embed_thumbnail:
+        postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+    params["postprocessors"] = postprocessors
     return params

@@ -9,11 +9,15 @@ from rich.markup import escape
 
 from yt_downloader.downloader import DownloadReport, download
 from yt_downloader.options import (
+    AUDIO_CODECS,
+    AudioOptions,
     ClipOptions,
     CommonOptions,
     VideoOptions,
+    build_audio_params,
     build_clip_params,
     build_video_params,
+    parse_audio_quality,
     parse_rate_limit,
     parse_timestamp,
 )
@@ -63,6 +67,21 @@ def _validate_timestamp(value: str | None) -> str | None:
     return value
 
 
+def _validate_codec(value: str) -> str:
+    if value not in AUDIO_CODECS:
+        raise typer.BadParameter(f"must be one of: {', '.join(AUDIO_CODECS)}")
+    return value
+
+
+def _validate_quality(value: str | None) -> str | None:
+    if value is not None:
+        try:
+            parse_audio_quality(value)
+        except ValueError as err:
+            raise typer.BadParameter(str(err)) from err
+    return value
+
+
 def _validate_container(value: str) -> str:
     if value not in ("mp4", "mkv"):
         raise typer.BadParameter("must be mp4 or mkv")
@@ -102,6 +121,11 @@ RateLimit = Annotated[
     typer.Option("--rate-limit", callback=_validate_rate_limit, help="Max download speed, e.g. 2M or 500K."),
 ]
 Verbose = Annotated[bool, typer.Option("--verbose", "-v", help="Show yt-dlp's detailed output.")]
+Archive = Annotated[bool, typer.Option("--archive", help="Keep an archive file and skip videos already downloaded.")]
+Playlist = Annotated[
+    bool, typer.Option("--playlist", help="If a video URL is part of a playlist, download the whole playlist.")
+]
+Sleep = Annotated[float | None, typer.Option("--sleep", min=0, help="Seconds to wait between downloads.")]
 
 
 @app.command()
@@ -116,14 +140,10 @@ def video(
     ] = None,
     embed_thumbnail: EmbedThumbnail = True,
     cookies_from_browser: CookiesFromBrowser = None,
-    archive: Annotated[
-        bool, typer.Option("--archive", help="Record downloads in archive.txt and skip ones already done.")
-    ] = False,
-    playlist: Annotated[
-        bool, typer.Option("--playlist", help="If a video URL is part of a playlist, download the whole playlist.")
-    ] = False,
+    archive: Archive = False,
+    playlist: Playlist = False,
     rate_limit: RateLimit = None,
-    sleep: Annotated[float | None, typer.Option("--sleep", min=0, help="Seconds to wait between downloads.")] = None,
+    sleep: Sleep = None,
     verbose: Verbose = False,
 ) -> None:
     """Download full videos: best video + audio, merged by FFmpeg."""
@@ -196,3 +216,51 @@ def clip(
 
     report = download([url], params, console, verbose=verbose)
     _print_report(report, 1)
+
+
+@app.command()
+def audio(
+    urls: Annotated[list[str], typer.Argument(help="One or more YouTube video or playlist URLs.")],
+    codec: Annotated[
+        str,
+        typer.Option(
+            "--codec",
+            "-c",
+            callback=_validate_codec,
+            help="m4a (AAC, plays everywhere), mp3 (re-encoded), opus (smallest), or best (keep the original).",
+        ),
+    ] = "m4a",
+    quality: Annotated[
+        str | None,
+        typer.Option(
+            "--quality",
+            "-q",
+            callback=_validate_quality,
+            help="Only used when re-encoding: 0 (best) to 10 (smallest), or a bitrate like 192k. mp3 default: 2.",
+        ),
+    ] = None,
+    output_dir: OutputDir = Path("downloads"),
+    embed_thumbnail: EmbedThumbnail = True,
+    cookies_from_browser: CookiesFromBrowser = None,
+    archive: Archive = False,
+    playlist: Playlist = False,
+    rate_limit: RateLimit = None,
+    sleep: Sleep = None,
+    verbose: Verbose = False,
+) -> None:
+    """Download audio only: m4a and opus are copied without re-encoding, mp3 is converted by FFmpeg."""
+    _run_preflight()
+
+    common = CommonOptions(
+        output_dir=output_dir,
+        embed_thumbnail=embed_thumbnail,
+        cookies_from_browser=cookies_from_browser,
+        use_archive=archive,
+        playlist=playlist,
+        rate_limit=rate_limit,
+        sleep_seconds=sleep,
+    )
+    params = build_audio_params(common, AudioOptions(codec=codec, quality=quality))
+
+    report = download(urls, params, console, verbose=verbose)
+    _print_report(report, len(urls))

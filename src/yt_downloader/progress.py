@@ -17,6 +17,7 @@ from rich.progress import (
 # Friendlier labels for the post-processors we use.
 POSTPROCESSOR_LABELS = {
     "Merger": "Merging video and audio",
+    "ExtractAudio": "Extracting audio",
     "VideoRemuxer": "Remuxing container",
     "EmbedSubtitle": "Embedding subtitles",
     "Metadata": "Embedding metadata",
