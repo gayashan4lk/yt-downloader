@@ -202,3 +202,11 @@ def build_audio_params(common: CommonOptions, audio: AudioOptions) -> dict[str, 
         postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
     params["postprocessors"] = postprocessors
     return params
+
+
+def build_info_params(common: CommonOptions) -> dict[str, Any]:
+    params = build_common_params(common)
+    params["skip_download"] = True
+    # For playlists, list the entries without fetching every video's full details.
+    params["extract_flat"] = "in_playlist"
+    return params

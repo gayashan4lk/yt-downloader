@@ -23,6 +23,7 @@ ERROR_HINTS = (
         "No stream matches your filters. Try a different --max-height or drop --compat.",
     ),
     ("unavailable", "The video is unavailable (removed, blocked in your region, or wrong URL)."),
+    ("playlist does not exist", "The playlist doesn't exist or is private. Check the list= part of the URL."),
     ("JavaScript runtime", "Install Deno so yt-dlp can solve YouTube's challenges: brew install deno"),
 )
 
@@ -72,3 +73,15 @@ def download(urls: list[str], params: dict[str, Any], console: Console, verbose:
                         console.print(f"[yellow]Hint:[/] {hint}")
 
     return report
+
+
+def fetch_info(url: str, params: dict[str, Any], console: Console, verbose: bool = False) -> dict[str, Any] | None:
+    """Extract metadata without downloading. Returns None (after printing the error) on failure."""
+    with YoutubeDL({**params, "logger": RichLogger(console, verbose=verbose)}) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+        except DownloadError as err:
+            if hint := hint_for(str(err)):
+                console.print(f"[yellow]Hint:[/] {hint}")
+            return None
+        return ydl.sanitize_info(info)

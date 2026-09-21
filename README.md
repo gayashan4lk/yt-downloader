@@ -59,6 +59,19 @@ uv run ytdl clip --help                       # all options
 
 Clips are saved as `Title [id] 00-01-30 to 00-02-45.mp4`, so they never overwrite the full video.
 
+### Info
+
+Nothing is downloaded, and FFmpeg isn't needed.
+
+```bash
+uv run ytdl info URL                         # title, channel, duration, subtitles, qualities by resolution and codec
+uv run ytdl info URL -F                      # also list every format (like yt-dlp -F)
+uv run ytdl info URL --json | jq .title      # full metadata as JSON for scripts
+uv run ytdl info PLAYLIST_URL                # playlist title and its videos
+```
+
+The "ytdl video gets" line shows what `ytdl video` would download with no options. Use the resolution table to choose `--max-height`: if H.264 is listed at a resolution, `--compat` can get it.
+
 Update yt-dlp regularly, since YouTube changes often break older versions:
 
 ```bash

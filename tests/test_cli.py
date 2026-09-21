@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from typer.testing import CliRunner
 
@@ -66,6 +68,7 @@ def test_missing_ffmpeg_stops_before_download(monkeypatch):
 def test_hint_for_bot_check():
     assert "cookies" in hint_for("ERROR: [youtube] x: Sign in to confirm you're not a bot")
     assert "unavailable" in hint_for("ERROR: [youtube] x: This video is unavailable")
+    assert "playlist" in hint_for("ERROR: [youtube:tab] x: YouTube said: The playlist does not exist.")
     assert hint_for("ERROR: something unrelated") is None
 
 
@@ -130,3 +133,93 @@ def test_audio_rejects_bad_options(monkeypatch, args):
     result = runner.invoke(cli.app, ["audio", "https://youtu.be/a", *args])
     assert result.exit_code == 2
     assert captured == {}
+
+
+# --- info ---
+
+VIDEO_INFO = {
+    "id": "abc123",
+    "title": "Test [video]",
+    "channel": "Someone",
+    "upload_date": "20240102",
+    "duration": 125,
+    "view_count": 1234567,
+    "webpage_url": "https://www.youtube.com/watch?v=abc123",
+    "resolution": "1280x720",
+    "vcodec": "avc1.64001f",
+    "acodec": "mp4a.40.2",
+    "subtitles": {"en": [], "si": []},
+    "formats": [
+        {"format_id": "22", "height": 720, "fps": 30, "vcodec": "avc1.64001f", "acodec": "none", "filesize": 5_000_000},
+        {"format_id": "140", "vcodec": "none", "acodec": "mp4a.40.2", "abr": 128, "filesize": 2_000_000},
+    ],
+}
+
+PLAYLIST_INFO = {
+    "_type": "playlist",
+    "title": "My playlist",
+    "channel": "Someone",
+    "playlist_count": 2,
+    "entries": [
+        {"id": "a1", "title": "First", "duration": 60},
+        {"id": "b2", "title": "Second", "duration": 90},
+    ],
+}
+
+
+def stub_info(monkeypatch, data, tools=None):
+    captured = {}
+
+    def fake_fetch(url, params, console, verbose=False):
+        captured.update(url=url, params=params)
+        return data
+
+    monkeypatch.setattr(cli, "check_tools", lambda: tools or PreflightResult([], []))
+    monkeypatch.setattr(cli, "fetch_info", fake_fetch)
+    return captured
+
+
+def test_info_shows_summary_and_qualities(monkeypatch):
+    captured = stub_info(monkeypatch, VIDEO_INFO)
+    result = runner.invoke(cli.app, ["info", "https://youtu.be/abc123"], env={"COLUMNS": "120"})
+    assert result.exit_code == 0, result.output
+    assert captured["params"]["skip_download"] is True
+    for text in ["Test [video]", "2024-01-02", "2:05", "1,234,567", "en, si", "720p", "H.264", "AAC", "128k"]:
+        assert text in result.output
+    assert "All formats" not in result.output
+
+
+def test_info_formats_flag_lists_every_format(monkeypatch):
+    stub_info(monkeypatch, VIDEO_INFO)
+    result = runner.invoke(cli.app, ["info", "https://youtu.be/abc123", "-F"], env={"COLUMNS": "150"})
+    assert result.exit_code == 0, result.output
+    assert "All formats" in result.output
+
+
+def test_info_json_is_valid_json(monkeypatch):
+    stub_info(monkeypatch, VIDEO_INFO)
+    result = runner.invoke(cli.app, ["info", "https://youtu.be/abc123", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["id"] == "abc123"
+
+
+def test_info_playlist(monkeypatch):
+    stub_info(monkeypatch, PLAYLIST_INFO)
+    result = runner.invoke(cli.app, ["info", "https://youtube.com/playlist?list=x"], env={"COLUMNS": "120"})
+    assert result.exit_code == 0, result.output
+    for text in ["My playlist", "First", "Second", "2:30"]:
+        assert text in result.output
+
+
+def test_info_failure_exits_1(monkeypatch):
+    stub_info(monkeypatch, None)
+    result = runner.invoke(cli.app, ["info", "https://youtu.be/gone"])
+    assert result.exit_code == 1
+
+
+def test_info_works_without_ffmpeg(monkeypatch):
+    from yt_downloader.preflight import TOOLS
+
+    stub_info(monkeypatch, VIDEO_INFO, tools=PreflightResult([TOOLS[0]], []))
+    result = runner.invoke(cli.app, ["info", "https://youtu.be/abc123"])
+    assert result.exit_code == 0, result.output

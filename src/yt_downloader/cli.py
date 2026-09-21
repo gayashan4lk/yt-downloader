@@ -1,5 +1,6 @@
 """Command-line interface: `ytdl <command> ...`."""
 
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -7,7 +8,8 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
-from yt_downloader.downloader import DownloadReport, download
+from yt_downloader.downloader import DownloadReport, download, fetch_info
+from yt_downloader.info import render_formats, render_playlist, render_video
 from yt_downloader.options import (
     AUDIO_CODECS,
     AudioOptions,
@@ -16,6 +18,7 @@ from yt_downloader.options import (
     VideoOptions,
     build_audio_params,
     build_clip_params,
+    build_info_params,
     build_video_params,
     parse_audio_quality,
     parse_rate_limit,
@@ -30,6 +33,8 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+# Logs and errors for `info --json`, so stdout stays pure JSON.
+err_console = Console(stderr=True)
 
 
 @app.callback()
@@ -37,13 +42,11 @@ def main() -> None:
     """Download YouTube videos with yt-dlp and FFmpeg."""
 
 
-def _run_preflight() -> None:
+def _run_preflight(require_ffmpeg: bool = True, out: Console = console) -> None:
     result = check_tools()
     for tool in result.missing_optional:
-        console.print(
-            f"[yellow]WARNING:[/] {tool.name} not found (used for {tool.purpose}). YouTube downloads may fail."
-        )
-    if not result.ok:
+        out.print(f"[yellow]WARNING:[/] {tool.name} not found (used for {tool.purpose}). YouTube downloads may fail.")
+    if require_ffmpeg and not result.ok:
         names = ", ".join(t.name for t in result.missing_required)
         console.print(f"[red]ERROR:[/] Missing required tools: {names}. {INSTALL_HINT}")
         raise typer.Exit(code=2)
@@ -264,3 +267,36 @@ def audio(
 
     report = download(urls, params, console, verbose=verbose)
     _print_report(report, len(urls))
+
+
+@app.command()
+def info(
+    url: Annotated[str, typer.Argument(help="A YouTube video or playlist URL.")],
+    formats: Annotated[
+        bool, typer.Option("--formats", "-F", help="Also list every format yt-dlp found (like yt-dlp -F).")
+    ] = False,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Print the full metadata as JSON (for scripts, e.g. piping to jq).")
+    ] = False,
+    playlist: Playlist = False,
+    cookies_from_browser: CookiesFromBrowser = None,
+    verbose: Verbose = False,
+) -> None:
+    """Show a video's details and available qualities without downloading anything."""
+    out = err_console if as_json else console
+    # Nothing is downloaded or converted, so ffmpeg isn't needed here.
+    _run_preflight(require_ffmpeg=False, out=out)
+
+    common = CommonOptions(embed_thumbnail=False, cookies_from_browser=cookies_from_browser, playlist=playlist)
+    data = fetch_info(url, build_info_params(common), out, verbose=verbose)
+    if data is None:
+        raise typer.Exit(code=1)
+
+    if as_json:
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    elif data.get("_type") == "playlist":
+        console.print(render_playlist(data))
+    else:
+        console.print(render_video(data))
+        if formats:
+            console.print(render_formats(data))
