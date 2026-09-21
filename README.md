@@ -31,6 +31,20 @@ uv run ytdl video PLAYLIST_URL --archive     # whole playlist, skip already-down
 uv run ytdl video --help                     # all options
 ```
 
+### Clips
+
+Only the chosen range is downloaded. Times can be `90`, `1:30` or `1:02:03`.
+
+```bash
+uv run ytdl clip URL --start 1:30 --end 2:45  # frame-exact cut (re-encodes to H.264/AAC)
+uv run ytdl clip URL -s 1:30 -e 2:45 --fast   # no re-encode, faster, may be off by a few seconds
+uv run ytdl clip URL -s 10:00                 # from 10:00 to the end
+uv run ytdl clip URL -e 0:30                  # first 30 seconds
+uv run ytdl clip --help                       # all options
+```
+
+Clips are saved as `Title [id] 00-01-30 to 00-02-45.mp4`, so they never overwrite the full video.
+
 Update yt-dlp regularly, since YouTube changes often break older versions:
 
 ```bash

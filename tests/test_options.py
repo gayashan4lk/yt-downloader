@@ -3,12 +3,15 @@ from pathlib import Path
 import pytest
 
 from yt_downloader.options import (
+    ClipOptions,
     CommonOptions,
     VideoOptions,
+    build_clip_params,
     build_common_params,
     build_format,
     build_video_params,
     parse_rate_limit,
+    parse_timestamp,
 )
 
 
@@ -91,3 +94,51 @@ def test_parse_rate_limit(value, expected):
 def test_parse_rate_limit_rejects_garbage(value):
     with pytest.raises(ValueError):
         parse_rate_limit(value)
+
+
+# --- clip ---
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [("90", 90), ("1:30", 90), ("01:02:03", 3723), ("1:30.5", 90.5), ("0", 0), (" 2:00 ", 120)],
+)
+def test_parse_timestamp(value, expected):
+    assert parse_timestamp(value) == expected
+
+
+@pytest.mark.parametrize("value", ["", "abc", "1:2:3:4", "1:60", "-5", "1:-3"])
+def test_parse_timestamp_rejects_garbage(value):
+    with pytest.raises(ValueError):
+        parse_timestamp(value)
+
+
+def ranges_of(params):
+    return list(params["download_ranges"]({"id": "x", "duration": 600}, None))
+
+
+def test_clip_params():
+    params = build_clip_params(CommonOptions(), VideoOptions(max_height=720), ClipOptions(start=90, end=165))
+    assert ranges_of(params) == [{"start_time": 90, "end_time": 165}]
+    assert params["force_keyframes_at_cuts"] is True
+    assert params["format"] == "bv*[height<=720]+ba/b[height<=720]"
+    assert "section_start" in params["outtmpl"]["default"]
+    metadata = next(pp for pp in params["postprocessors"] if pp["key"] == "FFmpegMetadata")
+    assert metadata["add_chapters"] is False
+
+
+def test_clip_without_end_runs_to_end_of_video():
+    params = build_clip_params(CommonOptions(), VideoOptions(), ClipOptions(start=30, precise=False))
+    assert ranges_of(params) == [{"start_time": 30, "end_time": float("inf")}]
+    assert params["force_keyframes_at_cuts"] is False
+
+
+def test_clip_rejects_end_before_start():
+    with pytest.raises(ValueError):
+        build_clip_params(CommonOptions(), VideoOptions(), ClipOptions(start=60, end=30))
+
+
+def test_video_keeps_chapters():
+    params = build_video_params(CommonOptions(), VideoOptions())
+    metadata = next(pp for pp in params["postprocessors"] if pp["key"] == "FFmpegMetadata")
+    assert metadata["add_chapters"] is True
