@@ -1,0 +1,27 @@
+[project]
+name = "yt-downloader"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "gayashan4lk", email = "gayashan4lk@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "rich>=15.0.0",
+    "typer>=0.27.2",
+    "yt-dlp[curl-cffi,default]>=2026.8.19",
+]
+
+[project.scripts]
+yt-downloader = "yt_downloader:main"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+]
