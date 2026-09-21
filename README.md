@@ -31,6 +31,20 @@ uv run ytdl video PLAYLIST_URL --archive     # whole playlist, skip already-down
 uv run ytdl video --help                     # all options
 ```
 
+### Audio
+
+```bash
+uv run ytdl audio URL                        # m4a (AAC): copied as-is, no quality loss, plays everywhere
+uv run ytdl audio URL -c mp3                 # mp3: re-encoded by FFmpeg (VBR quality 2 by default)
+uv run ytdl audio URL -c mp3 -q 320k         # mp3 at a fixed bitrate
+uv run ytdl audio URL -c opus                # opus: YouTube's best audio, smallest files, copied as-is
+uv run ytdl audio PLAYLIST_URL --archive     # whole playlist, skip already-downloaded
+uv run ytdl audio --help                     # all options
+```
+
+`--quality` only matters when FFmpeg re-encodes: `0` (best) to `10` (smallest), or a bitrate like `192k`.
+Audio downloads use their own `archive-audio.txt`, so downloading a video doesn't make `audio` skip it.
+
 ### Clips
 
 Only the chosen range is downloaded. Times can be `90`, `1:30` or `1:02:03`.
