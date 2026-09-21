@@ -8,3 +8,38 @@
 > | **`audio`** | Downloads only the sound, e.g. podcasts, music, lectures | `ytdl audio URL --codec mp3` | Converts the audio stream to MP3, M4A or Opus |
 > | **`clip`** | Downloads just part of a video | `ytdl clip URL --start 1:30 --end 2:45` | Cuts that time range cleanly so you don't download the whole thing |
 > | **`info`** | Shows details without downloading anything: title, duration, and the available resolutions and codecs | `ytdl info URL` | Not used. Handy for checking a URL or picking a quality first. |
+
+## Setup
+
+Requires [uv](https://docs.astral.sh/uv/), FFmpeg and Deno (yt-dlp uses Deno to solve YouTube's JavaScript challenges):
+
+```bash
+brew install uv ffmpeg deno
+uv sync
+```
+
+## Usage
+
+```bash
+uv run ytdl video URL                        # best quality, MP4, saved to ./downloads
+uv run ytdl video URL --max-height 1080      # cap the resolution
+uv run ytdl video URL --compat               # H.264 + AAC: plays in QuickTime, iOS, TVs
+uv run ytdl video URL -f mkv                 # MKV container
+uv run ytdl video URL1 URL2 -o ~/Videos      # several URLs, custom folder
+uv run ytdl video URL --subs en,si           # embed subtitles
+uv run ytdl video PLAYLIST_URL --archive     # whole playlist, skip already-downloaded
+uv run ytdl video --help                     # all options
+```
+
+Update yt-dlp regularly, since YouTube changes often break older versions:
+
+```bash
+uv lock --upgrade-package yt-dlp && uv sync
+```
+
+## Development
+
+```bash
+uv run pytest
+uv run ruff check src tests && uv run ruff format src tests
+```

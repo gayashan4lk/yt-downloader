@@ -1,7 +1,7 @@
 [project]
 name = "yt-downloader"
 version = "0.1.0"
-description = "Add your description here"
+description = "Download YouTube videos with yt-dlp and FFmpeg"
 readme = "README.md"
 authors = [
     { name = "gayashan4lk", email = "gayashan4lk@gmail.com" }
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-yt-downloader = "yt_downloader:main"
+ytdl = "yt_downloader.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.11.19,<0.12.0"]
@@ -25,3 +25,13 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.8",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

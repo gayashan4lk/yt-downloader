@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Downloads and local state
+downloads/
+archive.txt
+cookies.txt

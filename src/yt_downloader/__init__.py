@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from yt-downloader!")
+"""Download YouTube videos with yt-dlp and FFmpeg."""
