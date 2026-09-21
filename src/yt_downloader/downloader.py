@@ -57,6 +57,10 @@ def download(urls: list[str], params: dict[str, Any], console: Console, verbose:
             # Called with the final path after all post-processing.
             "post_hooks": [report.files.append],
         }
+        if not verbose:
+            # When ffmpeg itself downloads (e.g. clip sections), keep its stats off the
+            # terminal but still show real errors. Placed before the first input.
+            ydl_params["external_downloader_args"] = {"ffmpeg_i1": ["-loglevel", "error", "-nostats"]}
         with YoutubeDL(ydl_params) as ydl:
             for url in urls:
                 try:
