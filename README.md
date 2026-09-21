@@ -84,3 +84,16 @@ uv lock --upgrade-package yt-dlp && uv sync
 uv run pytest
 uv run ruff check src tests && uv run ruff format src tests
 ```
+
+## Documentation
+
+| Document | What's in it |
+|---|---|
+| [docs/PRD.md](docs/PRD.md) | Goals, users, requirements for each command and their status, risks, open questions |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, request flow, yt-dlp settings per command, yt-dlp quirks worked around |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log: why yt-dlp, Python, the m4a default, precise clips, … |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Prioritised backlog, known limitations, maintenance tasks |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Setup, workflow, testing strategy, real-URL checklist, adding a command, troubleshooting |
+| [CLAUDE.md](CLAUDE.md) | Short brief for AI coding assistants |
+
+Only download content you have the right to: your own, Creative Commons, public domain, or with permission.
