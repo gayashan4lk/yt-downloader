@@ -72,6 +72,67 @@ uv run ytdl info PLAYLIST_URL                # playlist title and its videos
 
 The "ytdl video gets" line shows what `ytdl video` would download with no options. Use the resolution table to choose `--max-height`: if H.264 is listed at a resolution, `--compat` can get it.
 
+### Cookies
+
+Some videos need a signed-in session: age-restricted ones, and any request once
+YouTube decides you look like a bot (`Sign in to confirm you're not a bot`).
+
+Two ways to supply one:
+
+```bash
+uv run ytdl video URL --cookies-from-browser safari   # read from an installed browser
+uv run ytdl video URL --cookies ~/yt-cookies.txt      # read from a cookies.txt file
+```
+
+`--cookies-from-browser` is easier, but it has a catch: YouTube rotates the cookies
+of a browser you're actively using and will log you out, so it stops working after a
+download or two. Close the browser first, or it can't read the cookie database at all.
+
+For something that keeps working, export a **throwaway session** to a file:
+
+1. Open a **private/incognito window** and log into YouTube.
+2. Open one video, so the session cookies are actually set.
+3. Export the cookies to a `cookies.txt` file in **Netscape format** (any
+   "cookies.txt" browser extension does this). JSON exports are not accepted.
+4. **Close the window without logging out.** Logging out kills the session
+   server-side and the exported file becomes useless.
+
+Check the file before relying on it:
+
+```bash
+uv run ytdl cookies check ~/yt-cookies.txt
+```
+
+```
+✓ Netscape format, 24 entries
+✓ google.com (13)  youtube.com (11)
+✓ Auth cookies present: SID, HSID, SSID, LOGIN_INFO
+⚠ Soonest expiry: 2026-10-03 (7 days)
+```
+
+It exits 0 when the file is usable, 1 when the session is expired or not signed in,
+and 2 when the file isn't Netscape format. A stale file fails with the same bot-check
+error as no cookies at all, so check here first.
+
+Notes:
+
+- ytdl **writes refreshed cookies back** to the file after each run. That's what keeps
+  the session alive as YouTube rotates them, so let it be written to and don't
+  restore it from a backup.
+- The file is a credential: it grants access to the account. Keep it out of the repo
+  and out of shared folders — `~/.config/ytdl/cookies/` (mode `700`) is a good home:
+
+  ```bash
+  mkdir -p ~/.config/ytdl/cookies && chmod 700 ~/.config/ytdl/cookies
+  uv run ytdl video URL --cookies ~/.config/ytdl/cookies/youtube.txt
+  ```
+
+  `ytdl cookies check` only ever prints cookie names, domains and expiry, never values.
+- `--cookies` and `--cookies-from-browser` can't be combined.
+- All four commands accept both flags, including `ytdl info`.
+- If cookies alone don't help, slow down: `--sleep 5 --rate-limit 2M`. A VPN or
+  datacenter IP makes the bot check much more aggressive.
+
 Update yt-dlp regularly, since YouTube changes often break older versions:
 
 ```bash

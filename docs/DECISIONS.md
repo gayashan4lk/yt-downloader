@@ -93,3 +93,18 @@ Format: **Context** (the situation) · **Decision** (what we chose) · **Consequ
 **Context.** Two yt-dlp behaviours made the output messy: FFmpeg's stats print directly when it does the downloading, and post-processor hooks are registered twice.
 **Decision.** Pass `-loglevel error -nostats` before the first FFmpeg input when not verbose. Skip consecutive repeats of `(postprocessor, filepath)`.
 **Consequences.** Clean output that still shows real FFmpeg errors. If yt-dlp fixes the double registration, the de-duplication does no harm.
+
+### ADR-14: Cookie files (`--cookies`) alongside `--cookies-from-browser`
+*2026-09-26 · Accepted*
+
+**Context.** YouTube's bot check (`Sign in to confirm you're not a bot`) started blocking downloads even with yt-dlp at the latest stable and Deno installed. `--cookies-from-browser` was the only cookie source we had, and it has two structural problems: it can't read a private/incognito window, and cookies taken from a browser you actively use get rotated and invalidated by YouTube within a download or two. The workaround that holds up is a throwaway login session exported to a file — which needs a file flag.
+
+**Decision.** Add `--cookies <file>` (yt-dlp's `cookiefile`) to all four commands, plus `ytdl cookies check <file>`. Three sub-decisions:
+
+- **Keep yt-dlp's cookie writeback.** `cookiefile` is read *and* written: yt-dlp dumps refreshed cookies back after each run. Copying to a temp file would keep the user's export pristine but let the session go stale within a few runs, defeating the point.
+- **No auto-discovered default path** (e.g. `~/.config/ytdl/cookies.txt`). The flag is always explicit. Credentials picked up implicitly are a surprise, and a shell alias covers the convenience case. Revisit if the config-file item on the roadmap lands.
+- **Validate at parse time, not download time.** `_validate_cookies` runs `inspect_cookie_file` in a Typer callback, so a malformed or non-YouTube file exits 2 before any network call, per the repo's exit-code rule.
+
+**Consequences.** `inspect_cookie_file` reuses `yt_dlp.cookies.YoutubeDLCookieJar.load()` rather than parsing Netscape format ourselves — it already rejects JSON exports with a useful message, handles the `#HttpOnly_` prefix, and normalises session cookies (`expires` 0 → `None`). That ties `cookies.py` to a yt-dlp internal module, which is a narrower API than the documented options dict; if it moves, the fallback is `http.cookiejar.MozillaCookieJar` plus our own JSON check. `check` needs a separate exit code for "parses but unusable" (1) versus "doesn't parse" (2).
+
+Cookie files are credentials, so `check` prints only names, domains and expiry — never values — and nothing logs the file's contents, including under `--verbose`. This is enforced by a test in both `tests/test_cookies.py` and `tests/test_cli.py`.

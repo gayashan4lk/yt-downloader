@@ -60,7 +60,7 @@ Status: ✅ shipped · 🔜 planned (see [ROADMAP.md](ROADMAP.md))
 | V7 | Playlists: a pure playlist URL downloads the whole list; a watch URL with `&list=` downloads just that video unless `--playlist` is passed | ✅ |
 | V8 | Archive (`--archive`): skip videos already downloaded | ✅ |
 | V9 | Politeness and throttling: `--rate-limit`, `--sleep` | ✅ |
-| V10 | Access to age-restricted or private videos through the user's browser cookies (`--cookies-from-browser`) | ✅ |
+| V10 | Access to age-restricted videos and past bot checks using cookies, from a browser (`--cookies-from-browser`) or a Netscape cookies.txt file (`--cookies`), with `ytdl cookies check` to verify a file before use | ✅ |
 
 ### 6.2 `ytdl clip URL --start --end` ✅
 | ID | Requirement | Status |

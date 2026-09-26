@@ -38,6 +38,7 @@ class CommonOptions:
     subtitle_langs: list[str] = field(default_factory=list)
     embed_thumbnail: bool = True
     cookies_from_browser: str | None = None
+    cookies_file: Path | None = None
     use_archive: bool = False
     playlist: bool = False
     rate_limit: str | None = None
@@ -128,6 +129,10 @@ def build_common_params(common: CommonOptions) -> dict[str, Any]:
         params["writethumbnail"] = True
     if common.cookies_from_browser:
         params["cookiesfrombrowser"] = (common.cookies_from_browser,)
+    if common.cookies_file:
+        # yt-dlp also writes refreshed cookies back here, which keeps the session
+        # alive as YouTube rotates them.
+        params["cookiefile"] = str(common.cookies_file)
     if common.use_archive:
         params["download_archive"] = str(common.output_dir / ARCHIVE_FILENAME)
     if common.rate_limit:
