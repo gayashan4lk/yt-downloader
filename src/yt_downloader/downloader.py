@@ -13,11 +13,18 @@ from yt_downloader.progress import DownloadProgress, RichLogger
 ERROR_HINTS = (
     (
         "Sign in to confirm you",
-        "YouTube suspects a bot. Retry later, add --sleep, or use --cookies-from-browser chrome.",
+        "YouTube suspects a bot. Retry later, add --sleep, or pass --cookies <file> (see README: Cookies). "
+        "Check an existing file with: ytdl cookies check <file>",
     ),
-    ("confirm your age", "Age-restricted video. Use --cookies-from-browser with a signed-in browser."),
+    (
+        "confirm your age",
+        "Age-restricted video. Use --cookies <file> or --cookies-from-browser with a signed-in account.",
+    ),
     ("Private video", "This video is private."),
-    ("members-only", "Members-only video. Use --cookies-from-browser with an account that has access."),
+    (
+        "members-only",
+        "Members-only video. Use --cookies <file> or --cookies-from-browser with an account that has access.",
+    ),
     (
         "Requested format is not available",
         "No stream matches your filters. Try a different --max-height or drop --compat.",

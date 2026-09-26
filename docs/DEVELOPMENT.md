@@ -113,7 +113,7 @@ Using `ytdl thumbnail URL` as an example:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `Sign in to confirm you're not a bot` | YouTube rate limiting or bot detection | Wait, `--sleep 5`, `--cookies-from-browser chrome`, upgrade yt-dlp |
+| `Sign in to confirm you're not a bot` | YouTube rate limiting or bot detection | Wait, `--sleep 5`, `--cookies <file>` (README: Cookies), upgrade yt-dlp. Verify an existing file with `ytdl cookies check <file>` — a stale session gives this same error |
 | Few formats, or warnings about JS or "n" challenges | Deno missing or old; yt-dlp out of date | `brew install deno` / `brew upgrade deno`; upgrade yt-dlp |
 | `Requested format is not available` | `--max-height` or `--compat` filters too strict | `ytdl info URL` to see what's available |
 | `ffmpeg not found` (exit 2) | FFmpeg not on PATH | `brew install ffmpeg` |

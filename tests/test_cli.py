@@ -223,3 +223,136 @@ def test_info_works_without_ffmpeg(monkeypatch):
     stub_info(monkeypatch, VIDEO_INFO, tools=PreflightResult([TOOLS[0]], []))
     result = runner.invoke(cli.app, ["info", "https://youtu.be/abc123"])
     assert result.exit_code == 0, result.output
+
+
+# --cookies and `ytdl cookies check`. See tests/test_cookies.py for the parsing itself.
+FAR_FUTURE = 4102444800  # 2100-01-01
+SOON = 1758844800  # 2025-09-26, comfortably in the past
+
+
+def cookie_file(tmp_path, *entries, header="# Netscape HTTP Cookie File\n", name="cookies.txt"):
+    path = tmp_path / name
+    lines = [
+        f"{domain}\t{str(domain.startswith('.')).upper()}\t/\tTRUE\t{expires}\t{cookie}\tvalue"
+        for domain, expires, cookie in entries
+    ]
+    path.write_text(header + "\n".join(lines) + "\n")
+    return path
+
+
+def good_cookies(tmp_path):
+    return cookie_file(tmp_path, (".youtube.com", FAR_FUTURE, "SID"), (".google.com", FAR_FUTURE, "LOGIN_INFO"))
+
+
+def test_cookies_file_reaches_downloader(monkeypatch, tmp_path):
+    captured = stub(monkeypatch)
+    path = good_cookies(tmp_path)
+    result = runner.invoke(cli.app, ["video", "https://youtu.be/a", "--cookies", str(path)])
+    assert result.exit_code == 0, result.output
+    assert captured["params"]["cookiefile"] == str(path)
+
+
+@pytest.mark.parametrize("command", ["video", "audio"])
+def test_cookies_file_supported_by_download_commands(monkeypatch, tmp_path, command):
+    captured = stub(monkeypatch)
+    path = good_cookies(tmp_path)
+    result = runner.invoke(cli.app, [command, "https://youtu.be/a", "--cookies", str(path)])
+    assert result.exit_code == 0, result.output
+    assert captured["params"]["cookiefile"] == str(path)
+
+
+def test_clip_accepts_cookies_file(monkeypatch, tmp_path):
+    captured = stub(monkeypatch)
+    path = good_cookies(tmp_path)
+    result = runner.invoke(cli.app, ["clip", "https://youtu.be/a", "-s", "10", "--cookies", str(path)])
+    assert result.exit_code == 0, result.output
+    assert captured["params"]["cookiefile"] == str(path)
+
+
+def test_info_accepts_cookies_file(monkeypatch, tmp_path):
+    captured = stub_info(monkeypatch, VIDEO_INFO)
+    path = good_cookies(tmp_path)
+    result = runner.invoke(cli.app, ["info", "https://youtu.be/abc123", "--cookies", str(path)])
+    assert result.exit_code == 0, result.output
+    assert captured["params"]["cookiefile"] == str(path)
+
+
+def test_malformed_cookies_stop_before_download(monkeypatch, tmp_path):
+    captured = stub(monkeypatch)
+    path = tmp_path / "bad.txt"
+    path.write_text("garbage\n")
+    result = runner.invoke(cli.app, ["video", "https://youtu.be/a", "--cookies", str(path)])
+    assert result.exit_code == 2
+    assert captured == {}
+
+
+def test_cookies_without_youtube_entries_rejected(monkeypatch, tmp_path):
+    captured = stub(monkeypatch)
+    path = cookie_file(tmp_path, (".example.com", FAR_FUTURE, "SID"))
+    result = runner.invoke(cli.app, ["video", "https://youtu.be/a", "--cookies", str(path)])
+    assert result.exit_code == 2
+    assert captured == {}
+
+
+def test_missing_cookies_file_rejected(monkeypatch, tmp_path):
+    captured = stub(monkeypatch)
+    result = runner.invoke(cli.app, ["video", "https://youtu.be/a", "--cookies", str(tmp_path / "nope.txt")])
+    assert result.exit_code == 2
+    assert captured == {}
+
+
+def test_cookies_and_cookies_from_browser_are_exclusive(monkeypatch, tmp_path):
+    captured = stub(monkeypatch)
+    path = good_cookies(tmp_path)
+    result = runner.invoke(
+        cli.app,
+        ["video", "https://youtu.be/a", "--cookies", str(path), "--cookies-from-browser", "safari"],
+    )
+    assert result.exit_code == 2
+    assert captured == {}
+
+
+def test_cookies_check_on_a_good_file(tmp_path):
+    result = runner.invoke(cli.app, ["cookies", "check", str(good_cookies(tmp_path))], env={"COLUMNS": "120"})
+    assert result.exit_code == 0, result.output
+    assert "2 entries" in result.output
+    assert "youtube.com (1)" in result.output
+    assert "SID, LOGIN_INFO" in result.output
+    # Cookies are credentials: never echo their values.
+    assert "value" not in result.output
+
+
+def test_cookies_check_rejects_malformed_file(tmp_path):
+    path = tmp_path / "bad.txt"
+    path.write_text("garbage\n")
+    result = runner.invoke(cli.app, ["cookies", "check", str(path)], env={"COLUMNS": "120"})
+    assert result.exit_code == 2
+    assert "Netscape" in result.output
+
+
+def test_cookies_check_flags_expired_session(tmp_path):
+    path = cookie_file(tmp_path, (".youtube.com", SOON, "SID"))
+    result = runner.invoke(cli.app, ["cookies", "check", str(path)], env={"COLUMNS": "120"})
+    assert result.exit_code == 1
+    assert "expired" in result.output
+
+
+def test_cookies_check_flags_missing_auth_cookies(tmp_path):
+    path = cookie_file(tmp_path, (".youtube.com", FAR_FUTURE, "PREF"))
+    result = runner.invoke(cli.app, ["cookies", "check", str(path)], env={"COLUMNS": "120"})
+    assert result.exit_code == 1
+    assert "bot check" in result.output
+
+
+def test_cookies_check_flags_missing_youtube_domain(tmp_path):
+    path = cookie_file(tmp_path, (".example.com", FAR_FUTURE, "SID"))
+    result = runner.invoke(cli.app, ["cookies", "check", str(path)], env={"COLUMNS": "120"})
+    assert result.exit_code == 1
+    assert "No youtube.com" in result.output
+
+
+def test_cookies_check_reports_session_only_cookies(tmp_path):
+    path = cookie_file(tmp_path, (".youtube.com", 0, "SID"))
+    result = runner.invoke(cli.app, ["cookies", "check", str(path)], env={"COLUMNS": "120"})
+    assert result.exit_code == 0, result.output
+    assert "session cookies" in result.output

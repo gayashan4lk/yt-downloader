@@ -1,6 +1,7 @@
 """Command-line interface: `ytdl <command> ...`."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -8,6 +9,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from yt_downloader.cookies import inspect_cookie_file
 from yt_downloader.downloader import DownloadReport, download, fetch_info
 from yt_downloader.info import render_formats, render_playlist, render_video
 from yt_downloader.options import (
@@ -59,6 +61,26 @@ def _validate_rate_limit(value: str | None) -> str | None:
         except ValueError as err:
             raise typer.BadParameter(str(err)) from err
     return value
+
+
+def _validate_cookies(value: Path | None) -> Path | None:
+    """Reject an unusable cookie file before anything is downloaded."""
+    if value is None:
+        return None
+    try:
+        report = inspect_cookie_file(value)
+    except ValueError as err:
+        raise typer.BadParameter(str(err)) from err
+    if not report.has_youtube:
+        raise typer.BadParameter(
+            f"no youtube.com or google.com cookies in {value}. Export them while signed in to YouTube."
+        )
+    return value
+
+
+def _check_one_cookie_source(cookies: Path | None, cookies_from_browser: str | None) -> None:
+    if cookies and cookies_from_browser:
+        raise typer.BadParameter("use either --cookies or --cookies-from-browser, not both", param_hint="--cookies")
 
 
 def _validate_timestamp(value: str | None) -> str | None:
@@ -119,6 +141,17 @@ CookiesFromBrowser = Annotated[
     str | None,
     typer.Option("--cookies-from-browser", help="Use cookies from a browser (chrome, firefox, safari...)."),
 ]
+Cookies = Annotated[
+    Path | None,
+    typer.Option(
+        "--cookies",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        callback=_validate_cookies,
+        help="Netscape-format cookies.txt file. See README: Cookies.",
+    ),
+]
 RateLimit = Annotated[
     str | None,
     typer.Option("--rate-limit", callback=_validate_rate_limit, help="Max download speed, e.g. 2M or 500K."),
@@ -143,6 +176,7 @@ def video(
     ] = None,
     embed_thumbnail: EmbedThumbnail = True,
     cookies_from_browser: CookiesFromBrowser = None,
+    cookies: Cookies = None,
     archive: Archive = False,
     playlist: Playlist = False,
     rate_limit: RateLimit = None,
@@ -150,6 +184,7 @@ def video(
     verbose: Verbose = False,
 ) -> None:
     """Download full videos: best video + audio, merged by FFmpeg."""
+    _check_one_cookie_source(cookies, cookies_from_browser)
     _run_preflight()
 
     common = CommonOptions(
@@ -157,6 +192,7 @@ def video(
         subtitle_langs=_split_langs(subs),
         embed_thumbnail=embed_thumbnail,
         cookies_from_browser=cookies_from_browser,
+        cookies_file=cookies,
         use_archive=archive,
         playlist=playlist,
         rate_limit=rate_limit,
@@ -192,10 +228,12 @@ def clip(
     output_dir: OutputDir = Path("downloads"),
     embed_thumbnail: EmbedThumbnail = True,
     cookies_from_browser: CookiesFromBrowser = None,
+    cookies: Cookies = None,
     rate_limit: RateLimit = None,
     verbose: Verbose = False,
 ) -> None:
     """Download part of a video: only the chosen time range is fetched and cut by FFmpeg."""
+    _check_one_cookie_source(cookies, cookies_from_browser)
     if start is None and end is None:
         raise typer.BadParameter("give --start, --end or both", param_hint="--start/--end")
     clip_options = ClipOptions(
@@ -212,6 +250,7 @@ def clip(
         output_dir=output_dir,
         embed_thumbnail=embed_thumbnail,
         cookies_from_browser=cookies_from_browser,
+        cookies_file=cookies,
         rate_limit=rate_limit,
     )
     video_options = VideoOptions(max_height=max_height, container=container, compat=compat)
@@ -245,6 +284,7 @@ def audio(
     output_dir: OutputDir = Path("downloads"),
     embed_thumbnail: EmbedThumbnail = True,
     cookies_from_browser: CookiesFromBrowser = None,
+    cookies: Cookies = None,
     archive: Archive = False,
     playlist: Playlist = False,
     rate_limit: RateLimit = None,
@@ -252,12 +292,14 @@ def audio(
     verbose: Verbose = False,
 ) -> None:
     """Download audio only: m4a and opus are copied without re-encoding, mp3 is converted by FFmpeg."""
+    _check_one_cookie_source(cookies, cookies_from_browser)
     _run_preflight()
 
     common = CommonOptions(
         output_dir=output_dir,
         embed_thumbnail=embed_thumbnail,
         cookies_from_browser=cookies_from_browser,
+        cookies_file=cookies,
         use_archive=archive,
         playlist=playlist,
         rate_limit=rate_limit,
@@ -280,14 +322,21 @@ def info(
     ] = False,
     playlist: Playlist = False,
     cookies_from_browser: CookiesFromBrowser = None,
+    cookies: Cookies = None,
     verbose: Verbose = False,
 ) -> None:
     """Show a video's details and available qualities without downloading anything."""
+    _check_one_cookie_source(cookies, cookies_from_browser)
     out = err_console if as_json else console
     # Nothing is downloaded or converted, so ffmpeg isn't needed here.
     _run_preflight(require_ffmpeg=False, out=out)
 
-    common = CommonOptions(embed_thumbnail=False, cookies_from_browser=cookies_from_browser, playlist=playlist)
+    common = CommonOptions(
+        embed_thumbnail=False,
+        cookies_from_browser=cookies_from_browser,
+        cookies_file=cookies,
+        playlist=playlist,
+    )
     data = fetch_info(url, build_info_params(common), out, verbose=verbose)
     if data is None:
         raise typer.Exit(code=1)
@@ -300,3 +349,63 @@ def info(
         console.print(render_video(data))
         if formats:
             console.print(render_formats(data))
+
+
+cookies_app = typer.Typer(help="Work with cookie files.", no_args_is_help=True)
+app.add_typer(cookies_app, name="cookies")
+
+# Warn this many days before a cookie expires, so there's time to export a fresh file.
+EXPIRY_WARN_DAYS = 14
+
+
+@cookies_app.command("check")
+def cookies_check(
+    path: Annotated[
+        Path,
+        typer.Argument(exists=True, dir_okay=False, readable=True, help="A Netscape-format cookies.txt file."),
+    ],
+) -> None:
+    """Check whether a cookie file still holds a usable YouTube session."""
+    try:
+        report = inspect_cookie_file(path)
+    except ValueError as err:
+        console.print(f"[red]✗[/] {escape(str(err))}")
+        raise typer.Exit(code=2) from err
+
+    console.print(f"[green]✓[/] Netscape format, {report.total} entries")
+
+    youtube = report.youtube_domains
+    if youtube:
+        counts = "  ".join(f"{escape(domain.lstrip('.'))} ({count})" for domain, count in sorted(youtube.items()))
+        console.print(f"[green]✓[/] {counts}")
+    else:
+        console.print("[red]✗[/] No youtube.com or google.com cookies. Export them while signed in to YouTube.")
+
+    if report.auth_present:
+        console.print(f"[green]✓[/] Auth cookies present: {', '.join(report.auth_present)}")
+    else:
+        console.print("[red]✗[/] No signed-in session cookies. This file won't get past the bot check.")
+
+    expired = _print_expiry(report.soonest_expiry)
+
+    if not youtube or not report.auth_present or expired:
+        raise typer.Exit(code=1)
+
+
+def _print_expiry(soonest: int | None) -> bool:
+    """Print the soonest expiry. Returns True if it has already passed."""
+    if soonest is None:
+        console.print("[dim]All cookies are session cookies (no expiry).[/]")
+        return False
+
+    when = datetime.fromtimestamp(soonest)
+    days = (when - datetime.now()).days
+    stamp = when.strftime("%Y-%m-%d")
+    if days < 0:
+        console.print(f"[red]✗[/] Soonest expiry: {stamp} (expired). Export a fresh file.")
+        return True
+    if days <= EXPIRY_WARN_DAYS:
+        console.print(f"[yellow]⚠[/] Soonest expiry: {stamp} ({days} days)")
+    else:
+        console.print(f"[green]✓[/] Soonest expiry: {stamp} ({days} days)")
+    return False

@@ -12,4 +12,9 @@ wheels/
 # Downloads and local state
 downloads/
 archive.txt
+
+# Cookie files are credentials. Keep them in ~/.config/ytdl/cookies/,
+# but never commit one that lands here by accident.
 cookies.txt
+cookies/
+*cookies*.txt

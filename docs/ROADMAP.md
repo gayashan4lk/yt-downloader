@@ -8,6 +8,7 @@ What could come next, roughly in priority order, plus known limitations. Each it
 - [x] `ytdl clip`: time ranges, precise/fast. PR #1.
 - [x] `ytdl audio`: m4a/opus copied without re-encoding, mp3 re-encoded, separate archive. PR #2.
 - [x] `ytdl info`: summary, quality tables, `-F`, `--json`, playlists. PR #3.
+- [x] `ytdl cookies check` and `--cookies <file>`: Netscape cookies.txt as an alternative to `--cookies-from-browser`, validated before download. Branch `feat/cookies-file`.
 
 ## Next up
 

@@ -37,7 +37,14 @@ def test_common_defaults():
     assert params["noplaylist"] is True
     assert params["windowsfilenames"] is True
     assert params["writethumbnail"] is True
-    for absent in ("cookiesfrombrowser", "download_archive", "ratelimit", "sleep_interval", "writesubtitles"):
+    for absent in (
+        "cookiesfrombrowser",
+        "cookiefile",
+        "download_archive",
+        "ratelimit",
+        "sleep_interval",
+        "writesubtitles",
+    ):
         assert absent not in params
 
 
@@ -48,6 +55,7 @@ def test_common_optional_settings():
             subtitle_langs=["en", "si"],
             embed_thumbnail=False,
             cookies_from_browser="chrome",
+            cookies_file=Path("cookies.txt"),
             use_archive=True,
             playlist=True,
             rate_limit="2M",
@@ -58,6 +66,7 @@ def test_common_optional_settings():
     assert params["writesubtitles"] is True
     assert "writethumbnail" not in params
     assert params["cookiesfrombrowser"] == ("chrome",)
+    assert params["cookiefile"] == "cookies.txt"
     assert params["download_archive"] == str(Path("out") / "archive.txt")
     assert params["noplaylist"] is False
     assert params["ratelimit"] == 2 * 1024 * 1024
